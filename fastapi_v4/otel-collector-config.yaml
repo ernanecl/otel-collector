@@ -1,0 +1,57 @@
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+      http:
+
+processors:
+  transform/metrics:
+    metric_statements:
+      - condition:
+          - contains(metric.attributes["k8s.namespace.name"], "opb")
+        statements:
+          - set(metric.attributes["target_topic"], "opb-metrics")
+      - condition:
+          - not contains(metric.attributes["k8s.namespace.name"], "opb")
+        statements:
+          - set(metric.attributes["target_topic"], "otel-metrics")
+
+  routing:
+    table:
+      - statement: route() where attributes["target_topic"] == "opb-metrics"
+        exporters: [kafka/opb]
+      - statement: route()
+        exporters: [kafka/default]
+
+exporters:
+  kafka/opb:
+    brokers: ["kafka-broker:9092"]
+    topic: opb-metrics
+    encoding: otlp_proto
+    protocol_version: 2.0.0
+    metadata:
+      full: true
+    auth:
+      plain_text:
+        username: "usuario"
+        password: "senha"
+
+  kafka/default:
+    brokers: ["kafka-broker:9092"]
+    topic: otel-metrics
+    encoding: otlp_proto
+    protocol_version: 2.0.0
+    metadata:
+      full: true
+    auth:
+      plain_text:
+        username: "usuario"
+        password: "senha"
+
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [transform/metrics, routing]
+      #exporters: [kafka/opb, kafka/default]
